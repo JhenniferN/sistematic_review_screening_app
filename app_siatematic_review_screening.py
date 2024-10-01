@@ -93,7 +93,7 @@ def create_excel_report(results, search_terms):
     # Escrever o DataFrame na primeira aba
     df_totals.to_excel(writer, sheet_name='Contagem de Termos', index=False)
     
-    writer.save()
+    writer.close()
     output.seek(0)
     return output
 
