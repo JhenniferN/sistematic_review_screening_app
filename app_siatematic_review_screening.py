@@ -5,6 +5,75 @@ import io
 import zipfile
 import pandas as pd
 
+# Função para extrair texto do PDF usando PdfReader
+def extract_text_from_pdf(pdf_file):
+    pdf_reader = PyPDF2.PdfReader(pdf_file)
+    text = ""
+    for page_num in range(len(pdf_reader.pages)):
+        page = pdf_reader.pages[page_num]
+        text += page.extract_text()
+    return text
+
+# Função para buscar termos no texto
+def search_term_in_text(text, search_terms, conditions):
+    sentences = text.split('.')
+    found_sentences = []
+    term_count = {term: 0 for term in search_terms}
+    
+    for sentence in sentences:
+        sentence_lower = sentence.lower()
+        include_sentence = True
+
+        for i, term in enumerate(search_terms):
+            term_found = term.lower() in sentence_lower
+            if i == 0:
+                include_sentence = term_found
+            else:
+                condition = conditions[i-1]
+                if condition == "and":
+                    include_sentence = include_sentence and term_found
+                elif condition == "or":
+                    include_sentence = include_sentence or term_found
+                elif condition == "not":
+                    include_sentence = include_sentence and not term_found
+
+        if include_sentence:
+            found_sentences.append(sentence.strip())
+            # Incrementa a contagem de termos baseados na presença deles em cada sentença
+            for term in search_terms:
+                term_count[term] += sentence_lower.count(term.lower())
+
+    return bool(found_sentences), found_sentences, term_count
+
+# Função para realizar a triagem
+def triagem_pdfs(files, search_terms, conditions):
+    results = []
+    for file in files:
+        text = extract_text_from_pdf(file)
+        term_found, found_sentences, term_count = search_term_in_text(text, search_terms, conditions)
+        if term_found:
+            results.append({
+                'Arquivo': file.name,
+                'PDF': file,
+                'Frases Encontradas': found_sentences,
+                'Contagem de Termos': term_count
+            })
+    return results
+
+# Função para criar um arquivo ZIP com os PDFs relevantes
+def create_zip(results):
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w") as zip_file:
+        for result in results:
+            pdf_data = result['PDF'].getvalue()
+            zip_file.writestr(result['Arquivo'], pdf_data)
+    
+    zip_buffer.seek(0)
+    return zip_buffer
+
+
+
+
 # Configura o estado para controlar a exibição das informações e o idioma
 if 'show_info' not in st.session_state:
     st.session_state.show_info = False
@@ -172,15 +241,10 @@ else:
                     mime="application/zip"
                 )
 
-                # Criar e oferecer o download do relatório em Excel
-                excel_file = create_excel_report(results, st.session_state.search_terms)
-                st.download_button(
-                    label=t('download_excel'),
-                    data=excel_file,
-                    file_name="relatorio_triangem.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
             else:
                 st.write(t('no_results'))
         else:
             st.error(t('file_error'))
+
+
+
